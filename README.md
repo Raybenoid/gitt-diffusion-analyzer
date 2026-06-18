@@ -2,7 +2,7 @@
 
 A single-file, browser-only tool for processing raw GITT (Galvanostatic Intermittent Titration Technique) battery test data. Upload a LAND-exported spreadsheet, and it automatically finds the four key voltage points in every pulse, lets you review and exclude bad cycles, and plots the lithium-ion diffusion coefficient against capacity.
 
-**[Open the live tool](https://YOUR-USERNAME.github.io/YOUR-REPO-NAME/)** — replace this link once GitHub Pages is enabled (see below).
+(https://raybenoid.github.io/gitt-diffusion-analyzer/)
 
 No installation, no build step, no backend. It's one HTML file that runs entirely in your browser — your battery data never leaves your computer.
 
