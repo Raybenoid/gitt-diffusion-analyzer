@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GITT Diffusion Coefficient Analyzer</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin></script>
+<style>
+  :root {
+    --paper:#F4F0E6; --ink:#23241F; --ink-soft:#5B5A52;
+    --grid:#DCD4BE; --panel:#FFFDF8; --panel-line:#E5DCC4;
+    --accent:#1F6F6B; --accent-soft:#DCEEEC; --accent-deep:#15504D;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: 'IBM Plex Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  #root { padding: 28px; max-width: 1180px; margin: 0 auto; }
+  .mono { font-family: 'IBM Plex Mono', 'Courier New', monospace; }
+  button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent-deep); outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+  .gitt-header { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
+  .gitt-title { font-family:'Space Grotesk','IBM Plex Sans',sans-serif; font-weight:700; font-size:26px; letter-spacing:-0.01em; display:flex; align-items:center; gap:10px;}
+  .gitt-eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--accent-deep); background:var(--accent-soft); padding:3px 8px; border-radius:3px; }
+  .gitt-sub { color:var(--ink-soft); font-size:13.5px; max-width:560px; }
+
+  .panel { background:var(--panel); border:1px solid var(--panel-line); border-radius:10px; padding:18px 20px; box-shadow:0 1px 0 rgba(0,0,0,0.03); }
+  .panel + .panel { margin-top:16px; }
+
+  .dropzone { border: 1.5px dashed var(--accent); border-radius:10px; padding:28px 20px;
+    display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center;
+    background: var(--panel); cursor:pointer; transition: background 0.15s ease; }
+  .dropzone:hover, .dropzone.drag { background: var(--accent-soft); }
+  .dropzone small { color: var(--ink-soft); font-size:12px; }
+
+  .btn { font-family:'IBM Plex Sans',sans-serif; font-weight:600; font-size:13px; padding:8px 14px;
+    border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; }
+  .btn:disabled { opacity:0.4; cursor:not-allowed; }
+  .btn.ghost { background:transparent; color:var(--accent-deep); }
+  .btn.icon { display:inline-flex; align-items:center; gap:6px; }
+
+  .tabs { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
+  .tab { flex:0 0 auto; font-family:'IBM Plex Mono',monospace; font-size:12.5px; padding:7px 12px; border-radius:6px;
+    border:1px solid var(--panel-line); background:var(--panel); cursor:pointer; color:var(--ink-soft); white-space:nowrap; }
+  .tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  .stat-row { display:flex; gap:18px; flex-wrap:wrap; margin-top:10px; }
+  .stat { font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); }
+  .stat b { color:var(--ink); font-size:15px; display:block; font-family:'Space Grotesk',sans-serif; }
+
+  .param-grid { display:grid; grid-template-columns: repeat(3, minmax(140px,1fr)); gap:14px; margin-top:6px; }
+  .field label { display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:5px; }
+  .field input { width:100%; font-family:'IBM Plex Mono',monospace; font-size:14px; padding:8px 10px;
+    border:1px solid var(--panel-line); border-radius:6px; background:#fff; color:var(--ink); }
+  .field input:focus { border-color:var(--accent); }
+  .field .hint { font-size:11px; color:var(--ink-soft); margin-top:4px; }
+
+  .geom-banner { margin-top:12px; font-family:'IBM Plex Mono',monospace; font-size:12.5px;
+    padding:9px 12px; border-radius:6px; background:var(--accent-soft); color:var(--accent-deep); }
+  .geom-banner.muted { background:#F1EEE4; color:var(--ink-soft); }
+
+  .scope-wrap { background:#0B1410; border-radius:10px; padding:14px 10px 6px; }
+  .scope-legend { display:flex; gap:14px; flex-wrap:wrap; padding: 10px 10px 4px; }
+  .legend-chip { display:flex; align-items:center; gap:6px; font-size:11.5px; color:#CDE4D8; font-family:'IBM Plex Mono',monospace; }
+
+  .legend-chip-light { display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; }
+  .chart-legend { display:flex; gap:16px; padding: 4px 4px 0; }
+
+  .pulse-nav { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px; flex-wrap:wrap; }
+  .pulse-nav .label { font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--ink-soft); }
+  .pulse-nav .label b { color: var(--ink); }
+  .nav-btn { display:flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:6px;
+    border:1px solid var(--panel-line); background:#fff; cursor:pointer; color:var(--ink); }
+  .nav-btn:disabled { opacity:0.35; cursor:not-allowed; }
+  .badge { font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:2px 7px; border-radius:10px; font-weight:600; }
+  .badge.ok { background:#E1F2E5; color:#1A7A38; }
+  .badge.no { background:#F1EEE4; color:#8A8678; }
+  .badge.form { background:#FBE7CF; color:#9A5B16; }
+
+  table.data { width:100%; border-collapse:collapse; font-family:'IBM Plex Mono',monospace; font-size:12px; }
+  table.data thead th { position:sticky; top:0; background:var(--panel); text-align:right; padding:7px 8px;
+    border-bottom:2px solid var(--ink); font-size:10.5px; color:var(--ink-soft); font-weight:600; white-space:nowrap; }
+  table.data thead th:first-child, table.data tbody td:first-child { text-align:left; }
+  table.data tbody td { padding:6px 8px; border-bottom:1px solid var(--panel-line); text-align:right; white-space:nowrap; }
+  table.data tbody tr:hover { background:var(--accent-soft); cursor:pointer; }
+  table.data tbody tr.selected { background:#FBE7CF; }
+  .table-scroll { max-height:420px; overflow:auto; border:1px solid var(--panel-line); border-radius:8px; }
+
+  .empty-state { text-align:center; padding:50px 20px; color:var(--ink-soft); }
+  .empty-state h3 { font-family:'Space Grotesk',sans-serif; color:var(--ink); margin-bottom:6px; }
+
+  .err-banner { background:#FBE3DC; color:#8E2E1E; padding:10px 14px; border-radius:6px; font-size:13px; margin-top:10px; }
+
+  @media (max-width: 720px) { .param-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useCallback, useEffect, useRef } = React;
+
+/* ============================================================
+   Colors
+   ============================================================ */
+const COLORS = {
+  paper: '#F4F0E6', ink: '#23241F', inkSoft: '#5B5A52',
+  grid: '#DCD4BE', panel: '#FFFDF8', panelLine: '#E5DCC4',
+  accent: '#1F6F6B', accentSoft: '#DCEEEC', accentDeep: '#15504D',
+  before: '#178A45', iR: '#D9711F', tau: '#B33A2E', after: '#7A3FA0',
+  charge: '#C0392B', discharge: '#1F6FA8',
+  scopeBg: '#0B1410', scopeGrid: '#1C3326', scopeAxis: '#7C9A8B', trace: '#E6B23D',
+};
+const MARKER_DEFS = [
+  { key: 'before', label: 'E_before · steady state before pulse', shape: 'diamond', color: COLORS.before },
+  { key: 'iR', label: 'E_iR · moment current is applied (IR drop)', shape: 'circle', color: COLORS.iR },
+  { key: 'tau', label: 'E_τ · end of constant-current pulse', shape: 'circle', color: COLORS.tau },
+  { key: 'after', label: 'E_after · new steady state after rest', shape: 'diamond', color: COLORS.after },
+];
+const EMPTY_SET = new Set();
+
+/* ============================================================
+   Pure functions: parsing / segmentation / calculation (matches the Python script logic)
+   ============================================================ */
+function median(arr) {
+  if (!arr.length) return NaN;
+  const s = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+function fmt(v, digits = 4) {
+  if (v === null || v === undefined || Number.isNaN(v) || !Number.isFinite(v)) return '—';
+  return v.toFixed(digits);
+}
+function fmtSci(v) {
+  if (v === null || v === undefined || Number.isNaN(v) || !Number.isFinite(v)) return '—';
+  if (v === 0) return '0';
+  return v.toExponential(2);
+}
+function downsample(arr, maxPoints = 1600) {
+  if (arr.length <= maxPoints) return arr;
+  const step = Math.ceil(arr.length / maxPoints);
+  const out = [];
+  for (let i = 0; i < arr.length; i += step) out.push(arr[i]);
+  if (out[out.length - 1] !== arr[arr.length - 1]) out.push(arr[arr.length - 1]);
+  return out;
+}
+
+function parseWorkbook(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const aoaRaw = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+  const aoaFmt = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: null });
+  if (!aoaRaw.length) return [];
+  const headerRow = aoaRaw[0] || [];
+  let nCols = 0;
+  for (const row of aoaRaw) nCols = Math.max(nCols, row.length);
+
+  const samples = [];
+  const usedNames = {};
+  for (let c = 0; c < nCols; c += 3) {
+    let name = headerRow[c];
+    name = (name === null || name === undefined || name === '') ? `Col${c + 1}` : String(name);
+    if (usedNames[name] !== undefined) {
+      usedNames[name] += 1;
+      name = `${name} #${usedNames[name] + 1}`;
+    } else {
+      usedNames[name] = 0;
+    }
+    const points = [];
+    for (let r = 2; r < aoaRaw.length; r++) {
+      const rowRaw = aoaRaw[r] || [];
+      const rowFmt = aoaFmt[r] || [];
+      const tRaw = rowRaw[c], iRaw = rowRaw[c + 1], vRaw = rowRaw[c + 2];
+      if (tRaw === null || tRaw === undefined || iRaw === null || iRaw === undefined || vRaw === null || vRaw === undefined) continue;
+      let tH;
+      const tFmtStr = rowFmt[c];
+      if (typeof tFmtStr === 'string' && tFmtStr.includes(':')) {
+        const parts = tFmtStr.split(':').map(Number);
+        if (parts.length === 3 && parts.every((p) => !Number.isNaN(p))) {
+          tH = parts[0] + parts[1] / 60 + parts[2] / 3600;
+        } else {
+          tH = typeof tRaw === 'number' ? tRaw : parseFloat(tRaw);
+        }
+      } else {
+        tH = typeof tRaw === 'number' ? tRaw : parseFloat(tRaw);
+      }
+      const I = typeof iRaw === 'number' ? iRaw : parseFloat(iRaw);
+      const V = typeof vRaw === 'number' ? vRaw : parseFloat(vRaw);
+      if (Number.isNaN(tH) || Number.isNaN(I) || Number.isNaN(V)) continue;
+      points.push({ t: tH, I, V });
+    }
+    if (points.length === 0) continue;
+    points.sort((a, b) => a.t - b.t);
+    samples.push({ name, points });
+  }
+  return samples;
+}
+
+function segmentSteps(points, eps = 1e-6) {
+  const raw = [];
+  let cur = null;
+  for (let idx = 0; idx < points.length; idx++) {
+    const I = points[idx].I;
+    const state = Math.abs(I) < eps ? 'rest' : (I > 0 ? 'charge' : 'discharge');
+    if (!cur || cur.state !== state) {
+      if (cur) raw.push(cur);
+      cur = { state, startIdx: idx, endIdx: idx };
+    } else { cur.endIdx = idx; }
+  }
+  if (cur) raw.push(cur);
+  return raw.map((s) => ({
+    ...s, tStart: points[s.startIdx].t, tEnd: points[s.endIdx].t,
+    Vstart: points[s.startIdx].V, Vend: points[s.endIdx].V,
+  }));
+}
+
+function cumulativeCapacity(points) {
+  const cap = new Array(points.length).fill(0);
+  for (let i = 1; i < points.length; i++) {
+    const dt = points[i].t - points[i - 1].t;
+    cap[i] = cap[i - 1] + ((points[i].I + points[i - 1].I) / 2) * dt;
+  }
+  return cap;
+}
+
+function linfit(xs, ys) {
+  const n = xs.length;
+  if (n < 3 || Math.max(...xs) <= 0) return { slope: NaN, r2: NaN };
+  const sumX = xs.reduce((a, b) => a + b, 0);
+  const sumY = ys.reduce((a, b) => a + b, 0);
+  const sumXY = xs.reduce((a, x, i) => a + x * ys[i], 0);
+  const sumXX = xs.reduce((a, x) => a + x * x, 0);
+  const denom = n * sumXX - sumX * sumX;
+  if (denom === 0) return { slope: NaN, r2: NaN };
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  const yMean = sumY / n;
+  let ssRes = 0, ssTot = 0;
+  for (let i = 0; i < n; i++) {
+    const yFit = slope * xs[i] + intercept;
+    ssRes += (ys[i] - yFit) ** 2;
+    ssTot += (ys[i] - yMean) ** 2;
+  }
+  const r2 = ssTot > 0 ? 1 - ssRes / ssTot : NaN;
+  return { slope, r2 };
+}
+
+function analyzePulses(points, segs, opts = {}) {
+  const { formationRatio = 3, voltageResolution = 0.0001, esThresholdFactor = 5, r2Min = 0.5 } = opts;
+  const cap = cumulativeCapacity(points);
+  const pulseDurs = segs.filter((s) => s.state !== 'rest').map((s) => s.tEnd - s.tStart);
+  const medianDur = median(pulseDurs);
+  const results = [];
+  for (let i = 0; i < segs.length; i++) {
+    const seg = segs[i];
+    if (seg.state === 'rest') continue;
+    const prevRest = (i - 1 >= 0 && segs[i - 1].state === 'rest') ? segs[i - 1] : null;
+    const nextRest = (i + 1 < segs.length && segs[i + 1].state === 'rest') ? segs[i + 1] : null;
+    const tauH = seg.tEnd - seg.tStart;
+    const tauS = tauH * 3600;
+    const isFormation = !Number.isNaN(medianDur) && tauH > formationRatio * medianDur;
+    const xs = [], ys = [];
+    for (let k = seg.startIdx; k <= seg.endIdx; k++) {
+      const trel = (points[k].t - seg.tStart) * 3600;
+      xs.push(Math.sqrt(Math.max(trel, 0)));
+      ys.push(points[k].V);
+    }
+    const { slope, r2 } = linfit(xs, ys);
+    const deltaEtau = Number.isNaN(slope) ? NaN : slope * Math.sqrt(tauS);
+    const Ebefore = prevRest ? prevRest.Vend : NaN;
+    const Eafter = nextRest ? nextRest.Vend : NaN;
+    const EiR = seg.Vstart;
+    const Etau = seg.Vend;
+    const deltaEs = (prevRest && nextRest) ? (Eafter - Ebefore) : NaN;
+    let Dproxy = NaN;
+    if (!Number.isNaN(deltaEtau) && deltaEtau !== 0 && !Number.isNaN(deltaEs)) {
+      Dproxy = (4 / (Math.PI * tauS)) * Math.pow(deltaEs / deltaEtau, 2);
+    }
+    const esOk = !Number.isNaN(deltaEs) && Math.abs(deltaEs) >= voltageResolution * esThresholdFactor;
+    const fitOk = !Number.isNaN(r2) && r2 >= r2Min;
+    const reliable = esOk && fitOk && !isFormation;
+    results.push({
+      idx: results.length, seg: i, state: seg.state, isFormation,
+      tStartH: seg.tStart, tauH, tauS,
+      capStart: cap[seg.startIdx], capEnd: cap[seg.endIdx],
+      Ebefore, EiR, Etau, Eafter, deltaEs, deltaEtau, r2, Dproxy, reliable,
+      tBefore: prevRest ? prevRest.tEnd : null, tAfter: nextRest ? nextRest.tEnd : null,
+      windowStartIdx: prevRest ? prevRest.startIdx : seg.startIdx,
+      windowEndIdx: nextRest ? nextRest.endIdx : seg.endIdx,
+    });
+  }
+  return results;
+}
+
+function downloadCSV(sampleName, pulses, geomFactor) {
+  const headers = ['pulse', 'state', 'is_formation', 't_start_h', 'tau_h', 'capacity_start_mAh', 'capacity_end_mAh',
+    'E_before_V', 'E_iR_V', 'E_tau_V', 'E_after_V', 'delta_Es_V', 'delta_E_tau_V', 'R2', 'D_proxy_s-1'];
+  if (geomFactor) headers.push('D_real_cm2_s');
+  headers.push('reliable');
+  const rows = pulses.map((p) => {
+    const row = [p.idx + 1, p.state, p.isFormation, fmt(p.tStartH, 4), fmt(p.tauH, 4),
+      fmt(p.capStart, 4), fmt(p.capEnd, 4), fmt(p.Ebefore), fmt(p.EiR), fmt(p.Etau), fmt(p.Eafter),
+      fmt(p.deltaEs), fmt(p.deltaEtau), fmt(p.r2, 4), fmtSci(p.Dproxy)];
+    if (geomFactor) row.push(fmtSci(p.Dproxy * geomFactor));
+    row.push(p.reliable);
+    return row;
+  });
+  const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `GITT_${sampleName.replace(/[^\w.-]+/g, '_')}_results.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ============================================================
+   Pure SVG chart components (no charting-library dependency)
+   ============================================================ */
+function scaleLinear(domain, range) {
+  const [d0, d1] = domain, [r0, r1] = range;
+  const m = (r1 - r0) / ((d1 - d0) || 1);
+  return (v) => r0 + (v - d0) * m;
+}
+function scaleLog(domain, range) {
+  const d0 = Math.log10(domain[0]), d1 = Math.log10(domain[1]);
+  const [r0, r1] = range;
+  const m = (r1 - r0) / ((d1 - d0) || 1);
+  return (v) => r0 + (Math.log10(v) - d0) * m;
+}
+function niceLinearTicks(min, max, count = 5) {
+  if (min === max) return [min];
+  const out = [];
+  for (let i = 0; i < count; i++) out.push(min + (max - min) * i / (count - 1));
+  return out;
+}
+function logTicks(dmin, dmax) {
+  const lo = Math.floor(Math.log10(dmin));
+  const hi = Math.ceil(Math.log10(dmax));
+  const out = [];
+  for (let e = lo; e <= hi; e++) out.push(Math.pow(10, e));
+  return out;
+}
+function Diamond({ cx, cy, color }) {
+  const r = 6.5;
+  return <path d={`M${cx},${cy - r} L${cx + r},${cy} L${cx},${cy + r} L${cx - r},${cy} Z`} fill={color} stroke="#fff" strokeWidth="1.4" />;
+}
+function CircleM({ cx, cy, color }) {
+  return <circle cx={cx} cy={cy} r="6" fill={color} stroke="#fff" strokeWidth="1.4" />;
+}
+
+function ScopeChart({ line, markers }) {
+  const width = 720, height = 300;
+  const padding = { left: 58, right: 18, top: 14, bottom: 32 };
+  const innerW = width - padding.left - padding.right;
+  const innerH = height - padding.top - padding.bottom;
+  const allMarkers = [...markers.before, ...markers.iR, ...markers.tau, ...markers.after];
+  const allT = line.map((p) => p.t).concat(allMarkers.map((p) => p.t));
+  const allV = line.map((p) => p.V).concat(allMarkers.map((p) => p.V));
+  if (!allT.length) return null;
+  let tMin = Math.min(...allT), tMax = Math.max(...allT);
+  let vMin = Math.min(...allV), vMax = Math.max(...allV);
+  if (tMin === tMax) { tMin -= 0.01; tMax += 0.01; }
+  const vPad = (vMax - vMin) * 0.08 || 0.01;
+  vMin -= vPad; vMax += vPad;
+  const x = scaleLinear([tMin, tMax], [padding.left, padding.left + innerW]);
+  const y = scaleLinear([vMin, vMax], [padding.top + innerH, padding.top]);
+  const pathD = line.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.t).toFixed(1)},${y(p.V).toFixed(1)}`).join(' ');
+  const xTicks = niceLinearTicks(tMin, tMax, 5);
+  const yTicks = niceLinearTicks(vMin, vMax, 5);
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} role="img" aria-label="GITT pulse voltage curve">
+      <rect x="0" y="0" width={width} height={height} fill={COLORS.scopeBg} rx="8" />
+      {yTicks.map((t, i) => (
+        <g key={'y' + i}>
+          <line x1={padding.left} x2={width - padding.right} y1={y(t)} y2={y(t)} stroke={COLORS.scopeGrid} strokeWidth="1" />
+          <text x={padding.left - 8} y={y(t) + 4} textAnchor="end" fontSize="10.5" fill={COLORS.scopeAxis} fontFamily="IBM Plex Mono, monospace">{t.toFixed(3)}</text>
+        </g>
+      ))}
+      {xTicks.map((t, i) => (
+        <g key={'x' + i}>
+          <line x1={x(t)} x2={x(t)} y1={padding.top} y2={height - padding.bottom} stroke={COLORS.scopeGrid} strokeWidth="1" />
+          <text x={x(t)} y={height - padding.bottom + 16} textAnchor="middle" fontSize="10.5" fill={COLORS.scopeAxis} fontFamily="IBM Plex Mono, monospace">{t.toFixed(2)}</text>
+        </g>
+      ))}
+      <path d={pathD} fill="none" stroke={COLORS.trace} strokeWidth="1.6" />
+      {markers.before.map((p, i) => <Diamond key={'b' + i} cx={x(p.t)} cy={y(p.V)} color={COLORS.before} />)}
+      {markers.iR.map((p, i) => <CircleM key={'i' + i} cx={x(p.t)} cy={y(p.V)} color={COLORS.iR} />)}
+      {markers.tau.map((p, i) => <CircleM key={'t' + i} cx={x(p.t)} cy={y(p.V)} color={COLORS.tau} />)}
+      {markers.after.map((p, i) => <Diamond key={'a' + i} cx={x(p.t)} cy={y(p.V)} color={COLORS.after} />)}
+      <text x={width / 2} y={height - 4} textAnchor="middle" fontSize="11" fill={COLORS.scopeAxis} fontFamily="IBM Plex Mono, monospace">Time (h)</text>
+    </svg>
+  );
+}
+
+function DCapacityChart({ chargeData, dischargeData, yLabel }) {
+  const width = 720, height = 320;
+  const padding = { left: 66, right: 20, top: 14, bottom: 34 };
+  const innerW = width - padding.left - padding.right;
+  const innerH = height - padding.top - padding.bottom;
+  const all = [...chargeData, ...dischargeData];
+  if (!all.length) {
+    return <div style={{ padding: 30, color: COLORS.inkSoft, fontSize: 13, textAlign: 'center' }}>No pulses currently meet the reliability criteria. Try another sample or check the parameters.</div>;
+  }
+  const capMin = Math.min(...all.map((d) => d.cap)), capMax = Math.max(...all.map((d) => d.cap));
+  const dMin = Math.min(...all.map((d) => d.D)), dMax = Math.max(...all.map((d) => d.D));
+  const x = scaleLinear([capMin, capMax], [padding.left, padding.left + innerW]);
+  const y = scaleLog([Math.max(dMin * 0.6, 1e-300), dMax * 1.5], [padding.top + innerH, padding.top]);
+  const yTicks = logTicks(Math.max(dMin * 0.6, 1e-300), dMax * 1.5);
+  const xTicks = niceLinearTicks(capMin, capMax, 6);
+  const linePath = (data) => data.slice().sort((a, b) => a.cap - b.cap)
+    .map((d, i) => `${i === 0 ? 'M' : 'L'}${x(d.cap).toFixed(1)},${y(d.D).toFixed(1)}`).join(' ');
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} role="img" aria-label="Diffusion coefficient vs. capacity curve">
+      <rect x="0" y="0" width={width} height={height} fill={COLORS.panel} rx="8" />
+      {yTicks.map((t, i) => (
+        <g key={i}>
+          <line x1={padding.left} x2={width - padding.right} y1={y(t)} y2={y(t)} stroke={COLORS.grid} />
+          <text x={padding.left - 8} y={y(t) + 3} textAnchor="end" fontSize="10" fill={COLORS.inkSoft} fontFamily="IBM Plex Mono, monospace">{fmtSci(t)}</text>
+        </g>
+      ))}
+      {xTicks.map((t, i) => (
+        <g key={i}>
+          <line x1={x(t)} x2={x(t)} y1={padding.top} y2={height - padding.bottom} stroke={COLORS.grid} />
+          <text x={x(t)} y={height - padding.bottom + 16} textAnchor="middle" fontSize="10" fill={COLORS.inkSoft} fontFamily="IBM Plex Mono, monospace">{t.toFixed(2)}</text>
+        </g>
+      ))}
+      <path d={linePath(chargeData)} fill="none" stroke={COLORS.charge} strokeWidth="2" />
+      {chargeData.map((d, i) => <circle key={'c' + i} cx={x(d.cap)} cy={y(d.D)} r="3.2" fill={COLORS.charge} />)}
+      <path d={linePath(dischargeData)} fill="none" stroke={COLORS.discharge} strokeWidth="2" />
+      {dischargeData.map((d, i) => <circle key={'d' + i} cx={x(d.cap)} cy={y(d.D)} r="3.2" fill={COLORS.discharge} />)}
+      <text x="14" y={height / 2} textAnchor="middle" fontSize="11" fill={COLORS.inkSoft} fontFamily="IBM Plex Mono, monospace" transform={`rotate(-90 14 ${height / 2})`}>{yLabel}</text>
+      <text x="14" y={height / 2} textAnchor="middle" fontSize="11" fill={COLORS.inkSoft} fontFamily="IBM Plex Mono, monospace" transform={`rotate(-90 14 ${height / 2})`}>{yLabel}</text>
+    </svg>
+  );
+}
+
+/* ============================================================
+   Simple icons (pure SVG, no icon-library dependency)
+   ============================================================ */
+function Icon({ children, size = 16, color = 'currentColor' }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{children}</svg>;
+}
+const UploadCloudIcon = (p) => <Icon {...p}><path d="M16 16l-4-4-4 4" /><path d="M12 12v9" /><path d="M20.4 17.6A5 5 0 0018 8h-1.3a8 8 0 10-10.4 9.7" /></Icon>;
+const ChevronLeftIcon = (p) => <Icon {...p}><polyline points="15 18 9 12 15 6" /></Icon>;
+const ChevronRightIcon = (p) => <Icon {...p}><polyline points="9 18 15 12 9 6" /></Icon>;
+const DownloadIcon = (p) => <Icon {...p}><path d="M12 3v12" /><polyline points="7 10 12 15 17 10" /><path d="M5 19h14" /></Icon>;
+const ActivityIcon = (p) => <Icon {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></Icon>;
+const FlaskIcon = (p) => <Icon {...p}><path d="M9 2v6L4 19a2 2 0 002 3h12a2 2 0 002-3L15 8V2" /><path d="M9 2h6" /></Icon>;
+
+/* ============================================================
+   Main component
+   ============================================================ */
+function GITTAnalyzer() {
+  const [samples, setSamples] = useState([]);
+  const [status, setStatus] = useState('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [selectedSample, setSelectedSample] = useState(0);
+  const [selectedPulse, setSelectedPulse] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  const [nm, setNm] = useState('');
+  const [vm, setVm] = useState('');
+  const [area, setArea] = useState('');
+  const [excludedMap, setExcludedMap] = useState({});
+  const fileInputRef = useRef(null);
+
+  const handleFile = useCallback((file) => {
+    setStatus('parsing'); setErrorMsg(''); setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setTimeout(() => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const parsed = parseWorkbook(data);
+          if (parsed.length === 0) throw new Error("Couldn't find valid time/current/voltage columns in this file. Please check that it's a LAND-exported file in the expected format.");
+          setSamples(parsed); setSelectedSample(0); setSelectedPulse(0); setExcludedMap({}); setStatus('ready');
+        } catch (err) { setErrorMsg(err.message || 'Parsing failed'); setStatus('error'); }
+      }, 10);
+    };
+    reader.onerror = () => { setErrorMsg('Failed to read the file. Please try again.'); setStatus('error'); };
+    reader.readAsArrayBuffer(file);
+  }, []);
+
+  const onFileChange = (e) => { const f = e.target.files && e.target.files[0]; if (f) handleFile(f); };
+  const onDrop = (e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) handleFile(f); };
+
+  const currentSample = samples[selectedSample];
+  const analysis = useMemo(() => {
+    if (!currentSample) return null;
+    const segs = segmentSteps(currentSample.points);
+    const pulses = analyzePulses(currentSample.points, segs);
+    return { segs, pulses };
+  }, [currentSample]);
+  const pulses = analysis ? analysis.pulses : [];
+
+  useEffect(() => {
+    if (!pulses.length) return;
+    const firstReliable = pulses.findIndex((p) => p.reliable);
+    setSelectedPulse(firstReliable >= 0 ? firstReliable : 0);
+  }, [selectedSample, samples]); // eslint-disable-line
+
+  const nmNum = parseFloat(nm), vmNum = parseFloat(vm), sNum = parseFloat(area);
+  const paramsValid = [nmNum, vmNum, sNum].every((v) => !Number.isNaN(v) && v > 0);
+  const geomFactor = paramsValid ? Math.pow((nmNum * vmNum) / sNum, 2) : null;
+
+  const reliablePulses = useMemo(() => pulses.filter((p) => p.reliable), [pulses]);
+  const dDataCharge = useMemo(() => reliablePulses.filter((p) => p.state === 'charge')
+    .map((p) => ({ cap: p.capEnd, D: geomFactor ? p.Dproxy * geomFactor : p.Dproxy })), [reliablePulses, geomFactor]);
+  const dDataDischarge = useMemo(() => reliablePulses.filter((p) => p.state === 'discharge')
+    .map((p) => ({ cap: p.capEnd, D: geomFactor ? p.Dproxy * geomFactor : p.Dproxy })), [reliablePulses, geomFactor]);
+
+  const pulse = pulses[selectedPulse];
+  const scopeLine = useMemo(() => {
+    if (!currentSample || !pulse) return [];
+    const slice = currentSample.points.slice(pulse.windowStartIdx, pulse.windowEndIdx + 1).map((pt) => ({ t: pt.t, V: pt.V }));
+    return downsample(slice, 1600);
+  }, [currentSample, pulse]);
+  const markerData = useMemo(() => {
+    if (!pulse) return { before: [], iR: [], tau: [], after: [] };
+    return {
+      before: (pulse.tBefore != null && !Number.isNaN(pulse.Ebefore)) ? [{ t: pulse.tBefore, V: pulse.Ebefore }] : [],
+      iR: !Number.isNaN(pulse.EiR) ? [{ t: pulse.tStartH, V: pulse.EiR }] : [],
+      tau: !Number.isNaN(pulse.Etau) ? [{ t: pulse.tStartH + pulse.tauH, V: pulse.Etau }] : [],
+      after: (pulse.tAfter != null && !Number.isNaN(pulse.Eafter)) ? [{ t: pulse.tAfter, V: pulse.Eafter }] : [],
+    };
+  }, [pulse]);
+
+  const stats = useMemo(() => {
+    if (!currentSample || !analysis) return null;
+    return { nPoints: currentSample.points.length, nSegs: analysis.segs.length,
+      nPulses: pulses.filter((p) => !p.isFormation).length, nReliable: reliablePulses.length };
+  }, [currentSample, analysis, pulses, reliablePulses]);
+
+  const goPulse = (delta) => setSelectedPulse((i) => Math.max(0, Math.min(pulses.length - 1, i + delta)));
+
+  const excludedSet = (currentSample && excludedMap[currentSample.name]) || EMPTY_SET;
+  const includedCount = pulses.length - excludedSet.size;
+  const toggleExport = (idx) => {
+    if (!currentSample) return;
+    setExcludedMap((prev) => {
+      const next = new Set(prev[currentSample.name] || []);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return { ...prev, [currentSample.name]: next };
+    });
+  };
+  const setAllExport = (include) => {
+    if (!currentSample) return;
+    setExcludedMap((prev) => ({
+      ...prev,
+      [currentSample.name]: include ? new Set() : new Set(pulses.map((p) => p.idx)),
+    }));
+  };
+  const setReliableOnlyExport = () => {
+    if (!currentSample) return;
+    setExcludedMap((prev) => ({
+      ...prev,
+      [currentSample.name]: new Set(pulses.filter((p) => !p.reliable).map((p) => p.idx)),
+    }));
+  };
+
+  return (
+    <div>
+      <div className="gitt-header">
+        <div>
+          <div className="gitt-title"><ActivityIcon size={24} color={COLORS.accentDeep} /> GITT Diffusion Coefficient Analyzer</div>
+          <div className="gitt-sub">Upload raw GITT data exported from a LAND tester. The tool automatically detects each pulse’s four key voltage points — steady state before the pulse, the IR drop the instant current is applied, the voltage at the end of the constant-current step, and the new steady state after rest — then plots the diffusion coefficient against capacity once you enter the material parameters. Everything runs locally in your browser; nothing is uploaded anywhere.</div>
+        </div>
+        <span className="gitt-eyebrow">Weppner–Huggins</span>
+      </div>
+
+      {samples.length === 0 ? (
+        <div className={`dropzone ${dragOver ? 'drag' : ''}`}
+          onClick={() => fileInputRef.current && fileInputRef.current.click()}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)} onDrop={onDrop}
+          role="button" tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter') fileInputRef.current.click(); }}>
+          <UploadCloudIcon size={30} color={COLORS.accentDeep} />
+          <div style={{ fontWeight: 600 }}>{status === 'parsing' ? 'Parsing…' : 'Click or drag an .xlsx file here'}</div>
+          <small>Each sample uses 3 columns: TestTime(h) / Current(mA) / Voltage(V). A single file containing multiple samples is supported.</small>
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={onFileChange} />
+          {status === 'error' && <div className="err-banner">{errorMsg}</div>}
+        </div>
+      ) : (
+        <>
+          <div className="panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <div className="mono" style={{ fontSize: 12.5, color: COLORS.inkSoft }}>Loaded: <b style={{ color: COLORS.ink }}>{fileName}</b> · {samples.length} sample(s)</div>
+            <button className="btn ghost" onClick={() => fileInputRef.current.click()}>Load a different file</button>
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={onFileChange} />
+          </div>
+
+          <div className="panel">
+            <div className="tabs">
+              {samples.map((s, i) => (
+                <button key={i} className={`tab ${i === selectedSample ? 'active' : ''}`} onClick={() => setSelectedSample(i)} title={s.name}>{s.name}</button>
+              ))}
+            </div>
+            {stats && (
+              <div className="stat-row">
+                <div className="stat">Data points <b>{stats.nPoints.toLocaleString()}</b></div>
+                <div className="stat">Segments <b>{stats.nSegs}</b></div>
+                <div className="stat">GITT pulses (excl. formation) <b>{stats.nPulses}</b></div>
+                <div className="stat">Reliable points usable for D <b>{stats.nReliable}</b></div>
+              </div>
+            )}
+          </div>
+
+          <div className="panel">
+            <div style={{ fontWeight: 700, fontFamily: "'Space Grotesk',sans-serif", display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FlaskIcon size={17} color={COLORS.accentDeep} /> Material parameters → real diffusion coefficient
+            </div>
+            <div className="param-grid">
+              <div className="field">
+                <label>n_m — moles of active material (mol)</label>
+                <input value={nm} onChange={(e) => setNm(e.target.value)} placeholder="e.g. 0.00231" inputMode="decimal" />
+                <div className="hint">= active material mass (g) / molar mass (g/mol)</div>
+              </div>
+              <div className="field">
+                <label>V_M — molar volume (cm³/mol)</label>
+                <input value={vm} onChange={(e) => setVm(e.target.value)} placeholder="e.g. 25.0" inputMode="decimal" />
+                <div className="hint">= molar mass (g/mol) / density (g/cm³)</div>
+              </div>
+              <div className="field">
+                <label>S — electrode/electrolyte contact area (cm²)</label>
+                <input value={area} onChange={(e) => setArea(e.target.value)} placeholder="e.g. 1.13" inputMode="decimal" />
+                <div className="hint">Usually the geometric area of the electrode</div>
+              </div>
+            </div>
+            <div className={`geom-banner ${paramsValid ? '' : 'muted'}`}>
+              {paramsValid
+                ? <>D = D_proxy × (n_m·V_M/S)² . Geometric factor = {fmtSci(geomFactor)} cm². The chart and table below now show the real D (cm²/s)</>
+                : 'Fill in all three parameters (each > 0) to automatically convert D_proxy into the real diffusion coefficient D (cm²/s). Leave them blank to see D_proxy = D / (n_m·V_M/S)² instead.'}
+            </div>
+          </div>
+
+          {pulses.length === 0 ? (
+            <div className="panel empty-state"><h3>No valid current pulses were detected in this sample</h3><div>Check whether the current column is all zero, or try a different sample.</div></div>
+          ) : (
+            <>
+              <div className="panel">
+                <div style={{ fontWeight: 700, fontFamily: "'Space Grotesk',sans-serif" }}>Pulse Oscilloscope</div>
+                <div className="scope-wrap" style={{ marginTop: 10 }}>
+                  <ScopeChart line={scopeLine} markers={markerData} />
+                  <div className="scope-legend">
+                    {MARKER_DEFS.map((m) => (
+                      <div key={m.key} className="legend-chip">
+                        <svg width="12" height="12">
+                          {m.shape === 'diamond' ? <path d="M6,0 L12,6 L6,12 L0,6 Z" fill={m.color} /> : <circle cx="6" cy="6" r="6" fill={m.color} />}
+                        </svg>
+                        {m.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="pulse-nav">
+                  <button className="nav-btn" onClick={() => goPulse(-1)} disabled={selectedPulse <= 0} aria-label="Previous pulse"><ChevronLeftIcon size={16} /></button>
+                  <div className="label">
+                    Pulse <b>#{pulse.idx + 1}</b> / {pulses.length} · {pulse.state === 'charge' ? 'Charge' : 'Discharge'} · τ = {fmt(pulse.tauH, 2)} h{' '}
+                    {pulse.isFormation && <span className="badge form" style={{ marginLeft: 6 }}>Formation/activation step</span>}
+                    {!pulse.isFormation && (pulse.reliable ? <span className="badge ok" style={{ marginLeft: 6 }}>Reliable</span> : <span className="badge no" style={{ marginLeft: 6 }}>Weak signal / poor fit</span>)}
+                  </div>
+                  <button className="nav-btn" onClick={() => goPulse(1)} disabled={selectedPulse >= pulses.length - 1} aria-label="Next pulse"><ChevronRightIcon size={16} /></button>
+                </div>
+              </div>
+
+              <div className="panel">
+                <div style={{ fontWeight: 700, fontFamily: "'Space Grotesk',sans-serif" }}>{paramsValid ? 'Diffusion coefficient D (cm²/s)' : 'D_proxy (material parameters not set)'} vs. capacity</div>
+                <div className="chart-legend">
+                  <div className="legend-chip-light"><span style={{ width: 11, height: 11, background: COLORS.charge, display: 'inline-block', borderRadius: 2 }}></span>Charge</div>
+                  <div className="legend-chip-light"><span style={{ width: 11, height: 11, background: COLORS.discharge, display: 'inline-block', borderRadius: 2 }}></span>Discharge</div>
+                </div>
+                <div style={{ marginTop: 6 }}>
+                  <DCapacityChart chargeData={dDataCharge} dischargeData={dDataDischarge} yLabel={paramsValid ? 'D (cm²/s)' : 'D_proxy (1/s)'} />
+                </div>
+              </div>
+
+              <div className="panel">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                  <div style={{ fontWeight: 700, fontFamily: "'Space Grotesk',sans-serif" }}>All pulse data</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span className="mono" style={{ fontSize: 12, color: COLORS.inkSoft }}>{includedCount} / {pulses.length} selected for export</span>
+                    <button className="btn ghost" onClick={() => setAllExport(true)}>Select all</button>
+                    <button className="btn ghost" onClick={() => setAllExport(false)}>Select none</button>
+                    <button className="btn ghost" onClick={setReliableOnlyExport}>Reliable only</button>
+                    <button className="btn icon" onClick={() => downloadCSV(currentSample.name, pulses.filter((p) => !excludedSet.has(p.idx)), geomFactor)}>
+                      <DownloadIcon size={14} /> Export CSV ({includedCount})
+                    </button>
+                  </div>
+                </div>
+                <div className="table-scroll" style={{ marginTop: 10 }}>
+                  <table className="data">
+                    <thead><tr>
+                      <th>Export</th><th>#</th><th>State</th><th>τ(h)</th><th>Cap. start (mAh)</th><th>Cap. end (mAh)</th>
+                      <th>E_before</th><th>E_iR</th><th>E_τ</th><th>E_after</th>
+                      <th>ΔEs</th><th>ΔEτ</th><th>R²</th><th>{paramsValid ? 'D (cm²/s)' : 'D_proxy'}</th><th>Flag</th>
+                    </tr></thead>
+                    <tbody>
+                      {pulses.map((p) => {
+                        const checked = !excludedSet.has(p.idx);
+                        return (
+                          <tr key={p.idx} className={p.idx === selectedPulse ? 'selected' : ''} onClick={() => setSelectedPulse(p.idx)}>
+                            <td style={{ textAlign: 'center' }}>
+                              <input type="checkbox" checked={checked} onChange={() => toggleExport(p.idx)} onClick={(e) => e.stopPropagation()} aria-label={`Include pulse #${p.idx + 1} in export`} />
+                            </td>
+                            <td>{p.idx + 1}</td><td>{p.state === 'charge' ? 'Charge' : 'Discharge'}</td><td>{fmt(p.tauH, 2)}</td>
+                            <td>{fmt(p.capStart, 3)}</td><td>{fmt(p.capEnd, 3)}</td>
+                            <td>{fmt(p.Ebefore)}</td><td>{fmt(p.EiR)}</td><td>{fmt(p.Etau)}</td><td>{fmt(p.Eafter)}</td>
+                            <td>{fmt(p.deltaEs)}</td><td>{fmt(p.deltaEtau)}</td><td>{fmt(p.r2, 3)}</td>
+                            <td>{fmtSci(paramsValid ? p.Dproxy * geomFactor : p.Dproxy)}</td>
+                            <td>{p.isFormation ? <span className="badge form">Formation</span> : p.reliable ? <span className="badge ok">Reliable</span> : <span className="badge no">Weak</span>}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<GITTAnalyzer />);
+</script>
+</body>
+</html>
